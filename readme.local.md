@@ -18,6 +18,9 @@
 
 ```bash
 qmk compile -kb ploopyco/aplus/rev2_001 -km default
+
+// original
+qmk compile -kb ploopyco/aplus/rev2_001 -km org
 ```
 
 生成されたUF2ファイルは以下に格納される。
