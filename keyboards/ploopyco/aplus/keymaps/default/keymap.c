@@ -93,8 +93,12 @@ void pointing_device_gestures_trigger(uint8_t direction) {
         case 5: /* North-West, Undo. */
             tap_code16(C(KC_Z));
             break;
-        case 6: /* North, Play/Pause Audio. */
-            tap_code16(KC_MEDIA_PLAY_PAUSE);
+        case 6: /* North, Mission Control / Task View. */
+            if (detected_host_os() == OS_WINDOWS) {
+                tap_code16(LGUI(KC_TAB));
+            } else if (detected_host_os() == OS_MACOS) {
+                tap_code16(LCTL(KC_UP));
+            }
             break;
         case 7: /* North-East, Redo. */
             /* On Windows/Linux, send CTRL + Y. */
