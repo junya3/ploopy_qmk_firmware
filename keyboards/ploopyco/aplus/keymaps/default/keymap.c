@@ -32,17 +32,17 @@ uint16_t rightwheel_current_position = 0;
 uint32_t last_scroll_time            = 0;
 
 /* Layer lighting, used to blink when making gestures. */
-const rgblight_segment_t PROGMEM righty_nav_layer_colour[]     = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_NAVBLUE});
+const rgblight_segment_t PROGMEM base_layer_colour[]           = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_NAVBLUE});
 const rgblight_segment_t PROGMEM control_layer_colour[]        = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_RED});
 const rgblight_segment_t PROGMEM gesture_layer_colour[]        = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_GESTUREYELLOW});
 const rgblight_segment_t PROGMEM option_changed_layer_colour[] = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_OPTIONCHANGED});
 
 /* Lighting layer definitions. Later layers take precedence, so these
    are defined in the order that they will be displayed in. */
-const rgblight_segment_t *const PROGMEM my_rgb_layers[] = RGBLIGHT_LAYERS_LIST(righty_nav_layer_colour, control_layer_colour, gesture_layer_colour, option_changed_layer_colour);
+const rgblight_segment_t *const PROGMEM my_rgb_layers[] = RGBLIGHT_LAYERS_LIST(base_layer_colour, control_layer_colour, gesture_layer_colour, option_changed_layer_colour);
 
 /* Colour layer names. */
-enum { RIGHTY_NAV_LAYER_COLOUR = 0, CONTROL_LAYER_COLOUR, GESTURE_LAYER_COLOUR, OPTION_CHANGED_LAYER_COLOUR };
+enum { BASE_LAYER_COLOUR = 0, CONTROL_LAYER_COLOUR, GESTURE_LAYER_COLOUR, OPTION_CHANGED_LAYER_COLOUR };
 
 /* EEPROM memory for the various persistent states that the A+ can have.
    See eeconfig_init_user() for default values and meanings. */
@@ -62,7 +62,7 @@ user_config_t user_config;
 enum my_keycodes { PKC_TGL_VERT_SCRL, PKC_TGL_HORIZ_SCRL, PKC_TGL_DRAG_SCRL, PKC_GESTURE, PKC_DRAG_SCROLL, PKC_ADJUST_LED_BRIGHTNESS, PKC_BLINKY_DPI_CONFIG };
 
 /* Layer names. */
-enum { LAYER_NAV_RIGHT_HANDED = 0, LAYER_CONTROL };
+enum { LAYER_BASE = 0, LAYER_CONTROL };
 
 /* Override default function in submodule code so that we can blink whenever
    a successful gesture is registered. */
@@ -142,7 +142,7 @@ const uint16_t PROGMEM pointing_device_gestures[NUM_GESTURE_DIRECTIONS] = GESTUR
 
 /* Keymap. */
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {// Base layer with all of the mouse-related stuff for everyday use.
-                                                              [LAYER_NAV_RIGHT_HANDED] = LAYOUT(MS_BTN4, MS_BTN5, PKC_DRAG_SCROLL, MS_BTN2, MS_BTN1, MS_BTN3, PKC_GESTURE, TG(LAYER_CONTROL)),
+                                                              [LAYER_BASE] = LAYOUT(MS_BTN4, MS_BTN5, PKC_DRAG_SCROLL, MS_BTN2, MS_BTN1, MS_BTN3, PKC_GESTURE, TG(LAYER_CONTROL)),
                                                               // Layer for all of the customization options.
                                                               [LAYER_CONTROL] = LAYOUT(PKC_BLINKY_DPI_CONFIG, PKC_ADJUST_LED_BRIGHTNESS, PKC_TGL_VERT_SCRL, PKC_TGL_HORIZ_SCRL, _______, PKC_TGL_DRAG_SCRL, TG(LAYER_CONTROL), TG(LAYER_CONTROL)),
                                                               [3]             = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
@@ -154,8 +154,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {// Base layer with
 /* Called whenever layers are modified. */
 layer_state_t layer_state_set_user(layer_state_t state) {
     switch (get_highest_layer(state)) {
-        case LAYER_NAV_RIGHT_HANDED:
-            rgblight_set_layer_state(RIGHTY_NAV_LAYER_COLOUR, true);
+        case LAYER_BASE:
+            rgblight_set_layer_state(BASE_LAYER_COLOUR, true);
             rgblight_set_layer_state(CONTROL_LAYER_COLOUR, false);
 
             dprintf("change layer: right-handed nav\n");
@@ -163,7 +163,7 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 
         case LAYER_CONTROL:
             rgblight_set_layer_state(CONTROL_LAYER_COLOUR, true);
-            rgblight_set_layer_state(RIGHTY_NAV_LAYER_COLOUR, false);
+            rgblight_set_layer_state(BASE_LAYER_COLOUR, false);
 
             dprintf("change layer: control\n");
             break;
