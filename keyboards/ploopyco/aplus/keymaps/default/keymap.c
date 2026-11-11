@@ -126,7 +126,8 @@ const uint16_t PROGMEM pointing_device_gestures[NUM_GESTURE_DIRECTIONS] = GESTUR
 
 /* Keymap. */
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
-    [LAYER_BASE] = LAYOUT(MS_BTN4, MS_BTN5, PKC_DRAG_SCROLL, MS_BTN2, MS_BTN1, MS_BTN3, PKC_GESTURE, KC_NO),
+    // [LAYER_BASE] = LAYOUT(MS_BTN4, MS_BTN5, PKC_DRAG_SCROLL, MS_BTN2, MS_BTN1, MS_BTN3, PKC_GESTURE, KC_NO),
+    [LAYER_BASE] = LAYOUT(MS_BTN4, KC_NO, MS_BTN3, MS_BTN5, PKC_GESTURE, PKC_DRAG_SCROLL, MS_BTN1, MS_BTN2),
     [2] = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
     [3] = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
     [4] = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
