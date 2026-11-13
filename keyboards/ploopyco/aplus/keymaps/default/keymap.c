@@ -55,69 +55,69 @@ enum { LAYER_BASE = 0 };
 /* Override default function in submodule code so that we can blink whenever
    a successful gesture is registered. */
 void pointing_device_gestures_trigger(uint8_t direction) {
-    /* Directions are numbered off 0-7, starting with east. */
+    const os_variant_t host_os = detected_host_os();
+    const bool is_mac = host_os == OS_MACOS;
+
+    /* Directions are numbered 0-7, starting with east. */
     switch (direction) {
         case 0: /* East, Next Virtual Desktop. */
-            /* On Windows, send CTRL + LGUI + RIGHT. */
-            if (detected_host_os() == OS_WINDOWS) {
+            /* Windows: CTRL + GUI + RIGHT. */
+            if (host_os == OS_WINDOWS) {
                 tap_code16(LCG(KC_RIGHT));
             }
-            /* On Linux, send CTRL + ALT + RIGHT. */
-            else if (detected_host_os() == OS_LINUX) {
+            /* Linux: CTRL + ALT + RIGHT. */
+            else if (host_os == OS_LINUX) {
                 tap_code16(LCA(KC_RIGHT));
             }
-            /* On MacOs, send Control + RIGHT. */
+            /* macOS: CTRL + RIGHT. */
             else {
                 tap_code16(LCTL(KC_RIGHT));
             }
             break;
+
         case 1: /* South-East, Paste. */
-            tap_code16(C(KC_V));
+            tap_code16(is_mac ? G(KC_V) : C(KC_V));
             break;
+
         case 2: /* South, Copy. */
-            tap_code16(C(KC_C));
+            tap_code16(is_mac ? G(KC_C) : C(KC_C));
             break;
+
         case 3: /* South-West, Cut. */
-            tap_code16(C(KC_X));
+            tap_code16(is_mac ? G(KC_X) : C(KC_X));
             break;
+
         case 4: /* West, Previous Virtual Desktop. */
-            /* On Windows, send CTRL + LGUI + LEFT. */
-            if (detected_host_os() == OS_WINDOWS) {
+            /* Windows: CTRL + GUI + LEFT. */
+            if (host_os == OS_WINDOWS) {
                 tap_code16(LCG(KC_LEFT));
             }
-            /* On Linux, send CTRL + ALT + LEFT. */
-            else if (detected_host_os() == OS_LINUX) {
+            /* Linux: CTRL + ALT + LEFT. */
+            else if (host_os == OS_LINUX) {
                 tap_code16(LCA(KC_LEFT));
             }
-            /* On MacOs, send Control + LEFT. */
+            /* macOS: CTRL + LEFT. */
             else {
                 tap_code16(LCTL(KC_LEFT));
             }
             break;
+
         case 5: /* North-West, Undo. */
-            tap_code16(C(KC_Z));
+            tap_code16(is_mac ? G(KC_Z) : C(KC_Z));
             break;
+
         case 6: /* North, Mission Control / Task View. */
-            if (detected_host_os() == OS_WINDOWS) {
+            if (host_os == OS_WINDOWS) {
                 tap_code16(LGUI(KC_TAB));
-            } else if (detected_host_os() == OS_MACOS) {
+            } else if (is_mac) {
                 tap_code16(LCTL(KC_UP));
             }
             break;
+
         case 7: /* North-East, Redo. */
-            /* On Windows/Linux, send CTRL + Y. */
-            if (detected_host_os() == OS_WINDOWS || detected_host_os() == OS_LINUX) {
-                tap_code16(C(KC_Y));
-            }
-            /* On MacOs, send CMD + SHIFT + Z. */
-            else {
-                register_code(KC_LCMD);
-                register_code(KC_LSFT);
-                tap_code(KC_Z);
-                unregister_code(KC_LCMD);
-                unregister_code(KC_LSFT);
-            }
+            tap_code16(is_mac ? LSG(KC_Z) : C(KC_Y));
             break;
+
         default:
             break;
     }
