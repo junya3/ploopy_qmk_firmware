@@ -77,4 +77,12 @@
 #define HSV_OPTIONCHANGED       240, 250, 252
 
 /* How long to blink for when an option-change button is pressed. */
-#define OPTION_CHANGE_BLINK_TIMEOUT 200 
+#define OPTION_CHANGE_BLINK_TIMEOUT 200
+
+// --------------------------------------
+// 個人設定
+// --------------------------------------
+
+/* DPI Settings */
+#define PLOOPY_DPI_OPTIONS { 600 }
+#define PLOOPY_DPI_DEFAULT 0

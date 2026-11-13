@@ -231,7 +231,7 @@ void keyboard_pre_init_kb(void) {
 
 void pointing_device_init_kb(void) {
     keyboard_config.raw = eeconfig_read_kb();
-    if (keyboard_config.dpi_config > DPI_OPTION_SIZE) {
+    if (keyboard_config.dpi_config >= DPI_OPTION_SIZE) {
         eeconfig_init_kb();
     }
     pointing_device_set_cpi(dpi_array[keyboard_config.dpi_config]);
