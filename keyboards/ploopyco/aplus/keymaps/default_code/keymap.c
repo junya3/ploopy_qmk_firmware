@@ -33,6 +33,9 @@
 #define WHEEL_DEADZONE_MARGIN 10
 /* |delta| がこれ以下なら「動いていない」とみなす。 */
 #define WHEEL_MOVE_THRESHOLD 2
+/* 読み取りに失敗しているセンサーを再試行する間隔 (ms)。
+   失敗中のI2C通信でメインループを塞がないよう、毎サイクルは試さない。 */
+#define WHEEL_RETRY_INTERVAL_MS 200
 
 /* ノブ押下を検出するマトリクス位置 (keymap の左ノブ/右ノブ)。 */
 #define KNOB_ROW 0
@@ -43,13 +46,14 @@
 #define STARTUP_LED_ON_MS 1000
 #define STARTUP_LED_FALLBACK_MS 2000
 
-/* mouse_report の v/h は WHEEL_EXTENDED_REPORT 有効時のみ int16_t。 */
+/* mouse_report の v/h は WHEEL_EXTENDED_REPORT 有効時のみ int16_t。
+   HIDレポートの論理最小値に合わせ、最小値は -128 / -32768 ではなく -127 / -32767 とする。 */
 #ifdef WHEEL_EXTENDED_REPORT
 #    define WHEEL_REPORT_MAX ((int32_t)INT16_MAX)
-#    define WHEEL_REPORT_MIN ((int32_t)INT16_MIN)
+#    define WHEEL_REPORT_MIN ((int32_t)INT16_MIN + 1)
 #else
 #    define WHEEL_REPORT_MAX ((int32_t)INT8_MAX)
-#    define WHEEL_REPORT_MIN ((int32_t)INT8_MIN)
+#    define WHEEL_REPORT_MIN ((int32_t)INT8_MIN + 1)
 #endif
 
 /* ========================================================================= */
@@ -60,13 +64,16 @@ typedef struct {
     const uint8_t addr;    /* TMAG5273 の I2C アドレス */
     const pin_t   pwr_pin; /* センサーの電源制御ピン */
 
+    bool     configured;      /* 起動時のセンサー初期化に成功したか (失敗なら再起動まで無効) */
+    bool     valid;           /* position / deadzone_center が有効か (読み取り成功済みか) */
+    uint32_t retry_timer;     /* 直近の失敗時刻 (再試行間隔の計測用) */
     uint16_t position;        /* 直近の角度 */
     uint16_t deadzone_center; /* デッドゾーン中心 */
     uint32_t idle_ms;         /* 無操作の継続時間 */
     bool     idle_handled;    /* 無操作によるデッドゾーン移動を実施済みか */
 
-    int32_t lowres_tick;  /* 低解像度スクロールの積算値 */
-    int32_t highres_rem;  /* 高解像度スクロールの余り */
+    int32_t lowres_tick; /* 低解像度スクロールの積算値 */
+    int32_t highres_rem; /* 高解像度スクロールの余り */
 } wheel_t;
 
 static wheel_t left_wheel  = {.addr = TMAG5273_D0_I2C_ADDRESS, .pwr_pin = TMAG5273_D0_PWR_PIN};
@@ -117,7 +124,7 @@ static inline bool host_uses_hires_scroll(os_variant_t os) {
 
 /* サブモジュール側の既定関数を上書きし、方向ごとの動作をここで定義する。 */
 void pointing_device_gestures_trigger(uint8_t direction) {
-    const os_variant_t host_os = detected_host_os();
+    const os_variant_t host_os  = detected_host_os();
     const bool         is_apple = host_is_apple(host_os);
 
     /* 方向は 0-7、東から時計回り。 */
@@ -210,19 +217,42 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 /* 初期化                                                                    */
 /* ========================================================================= */
 
-/* センサーに給電し、初期化して現在角度を基準にする。 */
-static void wheel_init(wheel_t *w) {
-    gpio_write_pin_high(w->pwr_pin);
-    wait_us(370); /* TMAG tstart_power_up + 100us の余裕 */
-    tmag5273_init_device(w->addr);
-    wait_ms(20);
-
-    w->position        = tmag5273_get_angle(w->addr);
-    w->deadzone_center = w->position;
+/* 角度の基準位置を現在角度に合わせ直し、状態をリセットする。 */
+static void wheel_resync(wheel_t *w, uint16_t angle) {
+    w->position        = angle;
+    w->deadzone_center = angle;
     w->idle_ms         = 0;
     w->idle_handled    = false;
     w->lowres_tick     = 0;
     w->highres_rem     = 0;
+    w->valid           = true;
+}
+
+/* センサーに給電し、初期化して現在角度を基準にする。
+   センサーの初期化に失敗した場合は configured = false とし、そのセンサーだけ無効にする
+   (もう一方は影響を受けない)。
+   初期角度の読み取りに失敗した場合は valid = false のままにし、
+   wheel_poll() が最初に読み取りに成功した時点で基準を設定する。 */
+static void wheel_init(wheel_t *w) {
+    w->valid       = false;
+    w->retry_timer = timer_read32();
+
+    gpio_write_pin_high(w->pwr_pin);
+    wait_us(370); /* TMAG tstart_power_up + 100us の余裕 */
+
+    w->configured = tmag5273_init_device(w->addr);
+    if (!w->configured) {
+        dprintf("Wheel 0x%02X: sensor init failed, disabled\n", w->addr);
+        return;
+    }
+    wait_ms(20);
+
+    uint16_t angle;
+    if (tmag5273_read_angle(w->addr, &angle)) {
+        wheel_resync(w, angle);
+    } else {
+        dprintf("Wheel 0x%02X: initial angle read failed\n", w->addr);
+    }
 }
 
 void keyboard_pre_init_user(void) {
@@ -301,10 +331,36 @@ static inline void wheel_clear_accumulators(wheel_t *w) {
 /* 角度を読み取り、変化量を返す。デッドゾーン外かどうかは *outside に入る。
    一定時間動きがなければ、デッドゾーン中心を現在位置へ移す (誤スクロール防止)。
 
-   TODO: tmag5273_get_angle() の失敗時の戻り値が分かれば、ここで読み取り失敗を
-         検出して、そのサイクルを無視する (センサー断線時の誤スクロール対策)。 */
+   読み取りに失敗したサイクルは、そのセンサーだけスクロールなし (0, outside = false) とする。
+   失敗後に最初に成功した読み取りは基準位置の再設定にのみ使い、スクロールは出さない
+   (失敗前後の角度差による突然のスクロールを防ぐ)。左右のセンサーは独立して扱う。 */
 static int16_t wheel_poll(wheel_t *w, uint32_t elapsed_ms, bool *outside) {
-    const uint16_t raw = tmag5273_get_angle(w->addr);
+    uint16_t raw;
+
+    /* 初期化に失敗したセンサー、または再試行間隔の待機中は何もしない。 */
+    if (!w->configured || (!w->valid && timer_elapsed32(w->retry_timer) < WHEEL_RETRY_INTERVAL_MS)) {
+        *outside = false;
+        return 0;
+    }
+
+    if (!tmag5273_read_angle(w->addr, &raw)) {
+        if (w->valid) {
+            dprintf("Wheel 0x%02X: angle read failed\n", w->addr);
+        }
+        w->valid       = false;
+        w->retry_timer = timer_read32();
+        wheel_clear_accumulators(w);
+        *outside = false;
+        return 0;
+    }
+
+    if (!w->valid) {
+        /* 初回、または失敗からの復帰。ここで基準を取り直す。 */
+        wheel_resync(w, raw);
+        dprintf("Wheel 0x%02X: angle read OK, resynced to %u\n", w->addr, (unsigned)raw);
+        *outside = false;
+        return 0;
+    }
 
     *outside = wheel_outside_deadzone(calculate_deadzone_distance(raw, &w->deadzone_center));
 

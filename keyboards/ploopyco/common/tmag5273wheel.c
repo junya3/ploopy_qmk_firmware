@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <stdbool.h>
-#include <stdlib.h>
+#include <stddef.h>
 #include "printf.h"
 #include "tmag5273wheel.h"
 
@@ -27,8 +27,8 @@ void tmag5273_init(void) {
 
 // Finds a TMAG5273 device on the I2C bus, and initializes it.
 // The device_addr argument sets the found device's address to
-// device_addr.
-void tmag5273_init_device(uint8_t device_addr) {
+// device_addr. Returns false if discovery or configuration fails.
+bool tmag5273_init_device(uint8_t device_addr) {
     uint16_t addr;
 
     if (i2c_ping_address(TMAG5273A1_I2C_ADDRESS, 100) == I2C_STATUS_SUCCESS) {
@@ -40,13 +40,15 @@ void tmag5273_init_device(uint8_t device_addr) {
     } else if (i2c_ping_address(TMAG5273D1_I2C_ADDRESS, 100) == I2C_STATUS_SUCCESS) {
         addr = TMAG5273D1_I2C_ADDRESS;
     } else {
-        // printf("No TMAG5273 device found; exiting\n");
-        exit(1);
+        return false;
     }
 
     // Give found device a new device address
     uint8_t i2c_address = device_addr | 0x1;
-    i2c_write_register(addr, REG_I2C_ADDRESS, &i2c_address, 1, 100);
+    if (i2c_write_register(addr, REG_I2C_ADDRESS, &i2c_address, 1, 100) != I2C_STATUS_SUCCESS ||
+        i2c_ping_address(device_addr, 100) != I2C_STATUS_SUCCESS) {
+        return false;
+    }
 
     // 32x oversampling
     uint8_t device_config_1 = 0b101 << 2;
@@ -64,18 +66,27 @@ void tmag5273_init_device(uint8_t device_addr) {
 
     uint8_t int_config = 0x1;
 
-    i2c_write_register(device_addr, REG_DEVICE_CONFIG_1, &device_config_1, 1, 100);
-    i2c_write_register(device_addr, REG_DEVICE_CONFIG_2, &device_config_2, 1, 100);
-    i2c_write_register(device_addr, REG_SENSOR_CONFIG_1, &sensor_config_1, 1, 100);
-    i2c_write_register(device_addr, REG_SENSOR_CONFIG_2, &sensor_config_2, 1, 100);
-    i2c_write_register(device_addr, REG_INT_CONFIG_1, &int_config, 1, 100);
+    return i2c_write_register(device_addr, REG_DEVICE_CONFIG_1, &device_config_1, 1, 100) == I2C_STATUS_SUCCESS &&
+           i2c_write_register(device_addr, REG_DEVICE_CONFIG_2, &device_config_2, 1, 100) == I2C_STATUS_SUCCESS &&
+           i2c_write_register(device_addr, REG_SENSOR_CONFIG_1, &sensor_config_1, 1, 100) == I2C_STATUS_SUCCESS &&
+           i2c_write_register(device_addr, REG_SENSOR_CONFIG_2, &sensor_config_2, 1, 100) == I2C_STATUS_SUCCESS &&
+           i2c_write_register(device_addr, REG_INT_CONFIG_1, &int_config, 1, 100) == I2C_STATUS_SUCCESS;
+}
+
+bool tmag5273_read_angle(uint8_t device_addr, uint16_t *rawangle) {
+    uint8_t data[2];
+    if (rawangle == NULL || i2c_read_register(device_addr, REG_ANGLE_RESULT_MSB, data, sizeof(data), 100) != I2C_STATUS_SUCCESS) {
+        return false;
+    }
+
+    *rawangle = ((uint16_t)data[0] << 8) | data[1];
+    return true;
 }
 
 uint16_t tmag5273_get_angle(uint8_t device_addr) {
-    uint8_t data[2];
-    i2c_read_register(device_addr, REG_ANGLE_RESULT_MSB, data, 2, 100);
-    uint16_t rawangle = (data[0] << 8) | data[1];
-    //printf("Angle: %d\n", rawangle);
+    uint16_t rawangle = 0;
+    /* Preserve the legacy API; new callers should use tmag5273_read_angle(). */
+    tmag5273_read_angle(device_addr, &rawangle);
     return rawangle;
 }
 
