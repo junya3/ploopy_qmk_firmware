@@ -239,6 +239,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 int16_t leftwheel_lowres_scroll_tick  = 0;
 int16_t rightwheel_lowres_scroll_tick = 0;
 
+/* High-resolution scroll remainders. */
+static int32_t leftwheel_highres_scroll_remainder  = 0;
+static int32_t rightwheel_highres_scroll_remainder = 0;
+
 uint32_t leftwheel_timeout  = 0;
 uint32_t rightwheel_timeout = 0;
 
@@ -250,6 +254,11 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
 
         int16_t leftwheel_deadzone_distance  = calculate_deadzone_distance(leftwheel_rawangle, &leftwheel_deadzone_center);
         int16_t rightwheel_deadzone_distance = calculate_deadzone_distance(rightwheel_rawangle, &rightwheel_deadzone_center);
+
+        /* Check whether each wheel is outside the deadzone. */
+        const bool leftwheel_scroll_active = leftwheel_deadzone_distance > (TMAG5273_WHEEL_DEADZONE - 10) || leftwheel_deadzone_distance < (-TMAG5273_WHEEL_DEADZONE + 10);
+
+        const bool rightwheel_scroll_active = rightwheel_deadzone_distance > (TMAG5273_WHEEL_DEADZONE - 10) || rightwheel_deadzone_distance < (-TMAG5273_WHEEL_DEADZONE + 10);
 
         int16_t leftwheel_delta    = calculate_wheel_delta(leftwheel_rawangle, leftwheel_current_position);
         leftwheel_current_position = leftwheel_rawangle;
@@ -297,51 +306,83 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
         }
 
         /* If we're on Windows or Linux, send hi-res scroll events. */
-        if ((detected_host_os() == OS_WINDOWS || detected_host_os() == OS_LINUX)) {
-            if (leftwheel_deadzone_distance > (TMAG5273_WHEEL_DEADZONE - 10) || leftwheel_deadzone_distance < (-TMAG5273_WHEEL_DEADZONE + 10)) {
-                mouse_report.v = -leftwheel_delta / TMAG5273_VERTICAL_WHEEL_SPEED_DIV;
-            }
-            if (rightwheel_deadzone_distance > (TMAG5273_WHEEL_DEADZONE - 10) || rightwheel_deadzone_distance < (-TMAG5273_WHEEL_DEADZONE + 10)) {
-                mouse_report.h = rightwheel_delta / TMAG5273_HORIZONAL_WHEEL_SPEED_DIV;
+        if (detected_host_os() == OS_WINDOWS || detected_host_os() == OS_LINUX) {
+            if (leftwheel_scroll_active) {
+                int32_t total = leftwheel_highres_scroll_remainder - leftwheel_delta;
+                int32_t ticks = total / TMAG5273_VERTICAL_WHEEL_SPEED_DIV;
+
+                if (ticks > INT8_MAX) {
+                    ticks = INT8_MAX;
+                } else if (ticks < INT8_MIN) {
+                    ticks = INT8_MIN;
+                }
+
+                mouse_report.v                     = (int8_t)ticks;
+                leftwheel_highres_scroll_remainder = total - ticks * TMAG5273_VERTICAL_WHEEL_SPEED_DIV;
+            } else {
+                leftwheel_highres_scroll_remainder = 0;
             }
 
+            if (rightwheel_scroll_active) {
+                int32_t total = rightwheel_highres_scroll_remainder + rightwheel_delta;
+                int32_t ticks = total / TMAG5273_HORIZONAL_WHEEL_SPEED_DIV;
+
+                if (ticks > INT8_MAX) {
+                    ticks = INT8_MAX;
+                } else if (ticks < INT8_MIN) {
+                    ticks = INT8_MIN;
+                }
+
+                mouse_report.h                      = (int8_t)ticks;
+                rightwheel_highres_scroll_remainder = total - ticks * TMAG5273_HORIZONAL_WHEEL_SPEED_DIV;
+            } else {
+                rightwheel_highres_scroll_remainder = 0;
+            }
         } else {
-            /* In this case, we're on another OS, so we just send regular scroll events. */
-            /* Certain operating systems, like MacOS, don't play well with the
-               high-res scrolling implementation. For more details, see:
-               https://github.com/qmk/qmk_firmware/issues/17585#issuecomment-2325248167
-               128 gives the scroll wheels "ticks". */
+            /* Send regular scroll events. */
 
-            leftwheel_lowres_scroll_tick += leftwheel_delta;
-            rightwheel_lowres_scroll_tick += rightwheel_delta;
+            if (leftwheel_scroll_active) {
+                leftwheel_lowres_scroll_tick += leftwheel_delta;
 
-            if (leftwheel_lowres_scroll_tick > TMAG5273_LOWRES_TICK_SIZE) {
-                mouse_report.v               = -1;
-                leftwheel_lowres_scroll_tick = 0;
-            } else if (leftwheel_lowres_scroll_tick < -TMAG5273_LOWRES_TICK_SIZE) {
-                mouse_report.v               = 1;
+                if (leftwheel_lowres_scroll_tick >= TMAG5273_LOWRES_TICK_SIZE) {
+                    mouse_report.v = -1;
+                    leftwheel_lowres_scroll_tick -= TMAG5273_LOWRES_TICK_SIZE;
+                } else if (leftwheel_lowres_scroll_tick <= -TMAG5273_LOWRES_TICK_SIZE) {
+                    mouse_report.v = 1;
+                    leftwheel_lowres_scroll_tick += TMAG5273_LOWRES_TICK_SIZE;
+                }
+            } else {
                 leftwheel_lowres_scroll_tick = 0;
             }
 
-            if (rightwheel_lowres_scroll_tick > TMAG5273_LOWRES_TICK_SIZE) {
-                mouse_report.h                = 1;
-                rightwheel_lowres_scroll_tick = 0;
-            } else if (rightwheel_lowres_scroll_tick < -TMAG5273_LOWRES_TICK_SIZE) {
-                mouse_report.h                = -1;
+            if (rightwheel_scroll_active) {
+                rightwheel_lowres_scroll_tick += rightwheel_delta;
+
+                if (rightwheel_lowres_scroll_tick >= TMAG5273_LOWRES_TICK_SIZE) {
+                    mouse_report.h = 1;
+                    rightwheel_lowres_scroll_tick -= TMAG5273_LOWRES_TICK_SIZE;
+                } else if (rightwheel_lowres_scroll_tick <= -TMAG5273_LOWRES_TICK_SIZE) {
+                    mouse_report.h = -1;
+                    rightwheel_lowres_scroll_tick += TMAG5273_LOWRES_TICK_SIZE;
+                }
+            } else {
                 rightwheel_lowres_scroll_tick = 0;
             }
         }
-
-        /* Set scroll data to zero if the corresponding button is
-           currently being held down. */
+        /* Set scroll data to zero if the corresponding button is held. */
 
         /* Check left knob. */
         if (matrix_is_on(0, 6)) {
-            mouse_report.v = 0;
+            mouse_report.v                     = 0;
+            leftwheel_lowres_scroll_tick       = 0;
+            leftwheel_highres_scroll_remainder = 0;
         }
+
         /* Check right knob. */
         if (matrix_is_on(0, 7)) {
-            mouse_report.h = 0;
+            mouse_report.h                      = 0;
+            rightwheel_lowres_scroll_tick       = 0;
+            rightwheel_highres_scroll_remainder = 0;
         }
     }
 
