@@ -56,7 +56,7 @@ enum { LAYER_BASE = 0 };
    a successful gesture is registered. */
 void pointing_device_gestures_trigger(uint8_t direction) {
     const os_variant_t host_os = detected_host_os();
-    const bool is_mac = host_os == OS_MACOS;
+    const bool         is_mac  = host_os == OS_MACOS;
 
     /* Directions are numbered 0-7, starting with east. */
     switch (direction) {
@@ -210,6 +210,9 @@ void keyboard_post_init_user(void) {
     rgblight_mode_noeeprom(RGBLIGHT_MODE_STATIC_LIGHT);
 
     rgblight_sethsv_noeeprom(0, 0, RGBLIGHT_VAL_STEP * 4);
+
+    startup_led_timer  = timer_read32();
+    startup_led_active = true;
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
@@ -350,6 +353,14 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
 // --------------------------------------
 // 起動時1秒だけOSに応じた色を点灯
 bool process_detected_host_os_user(os_variant_t detected_os) {
+    /* Wait for OS detection to stabilize. */
+    if (detected_os == OS_UNSURE) {
+        return true;
+    }
+
+    /* Re-enable RGB lighting in case it was disabled. */
+    rgblight_enable_noeeprom();
+
     /* Disable all startup LED layers first. */
     rgblight_set_layer_state(MAC_LAYER_COLOUR, false);
     rgblight_set_layer_state(WINDOWS_LAYER_COLOUR, false);
