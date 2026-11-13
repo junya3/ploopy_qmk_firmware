@@ -209,7 +209,7 @@ void keyboard_post_init_user(void) {
     rgblight_enable_noeeprom();
     rgblight_mode_noeeprom(RGBLIGHT_MODE_STATIC_LIGHT);
 
-    rgblight_sethsv(0, 0, RGBLIGHT_VAL_STEP * 4);
+    rgblight_sethsv_noeeprom(0, 0, RGBLIGHT_VAL_STEP * 4);
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
