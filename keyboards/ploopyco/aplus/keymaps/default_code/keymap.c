@@ -251,6 +251,7 @@ static void wheel_init(wheel_t *w) {
     if (tmag5273_read_angle(w->addr, &angle)) {
         wheel_resync(w, angle);
     } else {
+        w->retry_timer = timer_read32();
         dprintf("Wheel 0x%02X: initial angle read failed\n", w->addr);
     }
 }
