@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include "i2c_master.h"
 
@@ -98,7 +99,9 @@
 #define REG_DEVICE_STATUS           0x1C
 
 void tmag5273_init(void);
-void tmag5273_init_device(uint8_t);
+bool tmag5273_init_device(uint8_t device_addr);
+bool tmag5273_read_angle(uint8_t device_addr, uint16_t *rawangle);
+/* Legacy value-only API; returns 0 if the angle read fails. */
 uint16_t tmag5273_get_angle(uint8_t);
 
 int16_t calculate_wheel_delta( uint16_t wheel_rawangle, uint16_t wheel_current_position );
