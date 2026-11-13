@@ -31,17 +31,21 @@ uint16_t leftwheel_current_position  = 0;
 uint16_t rightwheel_current_position = 0;
 uint32_t last_scroll_time            = 0;
 
+/* Startup LED timer. */
+static uint32_t startup_led_timer  = 0;
+static bool     startup_led_active = false;
+
 /* Layer lighting, used to blink when making gestures. */
-const rgblight_segment_t PROGMEM base_layer_colour[]           = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_NAVBLUE});
-const rgblight_segment_t PROGMEM gesture_layer_colour[]        = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_GESTUREYELLOW});
-const rgblight_segment_t PROGMEM option_changed_layer_colour[] = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_OPTIONCHANGED});
+const rgblight_segment_t PROGMEM mac_layer_colour[]     = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_NAVGREEN});
+const rgblight_segment_t PROGMEM windows_layer_colour[] = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_NAVBLUE});
+const rgblight_segment_t PROGMEM other_layer_colour[]   = RGBLIGHT_LAYER_SEGMENTS({0, 2, HSV_GESTUREYELLOW});
 
 /* Lighting layer definitions. Later layers take precedence, so these
    are defined in the order that they will be displayed in. */
-const rgblight_segment_t *const PROGMEM my_rgb_layers[] = RGBLIGHT_LAYERS_LIST(base_layer_colour, gesture_layer_colour, option_changed_layer_colour);
+const rgblight_segment_t *const PROGMEM my_rgb_layers[] = RGBLIGHT_LAYERS_LIST(mac_layer_colour, windows_layer_colour, other_layer_colour);
 
 /* Colour layer names. */
-enum { BASE_LAYER_COLOUR = 0, GESTURE_LAYER_COLOUR, OPTION_CHANGED_LAYER_COLOUR };
+enum { MAC_LAYER_COLOUR = 0, WINDOWS_LAYER_COLOUR, OTHER_LAYER_COLOUR };
 
 enum my_keycodes { PKC_GESTURE = SAFE_RANGE, PKC_DRAG_SCROLL };
 
@@ -117,9 +121,6 @@ void pointing_device_gestures_trigger(uint8_t direction) {
         default:
             break;
     }
-
-    /* Flash light to indicate successful gesture processing. */
-    rgblight_blink_layer(OPTION_CHANGED_LAYER_COLOUR, OPTION_CHANGE_BLINK_TIMEOUT * 2);
 }
 
 /* Mouse gestures keymap. Since we cannot use custom keycodes in this array and
@@ -128,17 +129,37 @@ void pointing_device_gestures_trigger(uint8_t direction) {
    for what the gestures actually do. */
 const uint16_t PROGMEM pointing_device_gestures[NUM_GESTURE_DIRECTIONS] = GESTURES_CARDINAL_AND_ORDINAL_DIRECTIONS(KC_NO, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO);
 
-/* Keymap. */
+/* Keymap. フォーマットオフ*/
+// clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
-    // [LAYER_BASE] = LAYOUT(MS_BTN4, MS_BTN5, PKC_DRAG_SCROLL, MS_BTN2, MS_BTN1, MS_BTN3, PKC_GESTURE, KC_NO),
-    [LAYER_BASE] = LAYOUT(MS_BTN4, KC_NO, MS_BTN3, MS_BTN5, PKC_GESTURE, PKC_DRAG_SCROLL, MS_BTN1, MS_BTN2),
-    [2] = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
-    [3] = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
-    [4] = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
-    [5] = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
-    [6] = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
-    [7] = LAYOUT(_______, _______, _______, _______, _______, _______, _______, _______),
+    // キー配置　見たままにしてます
+    // 左上 | 左上中央　| 右上中央 | 右上
+    // 右下 | 左下　| 左ノブ| 右ノブ
+
+    [LAYER_BASE] = LAYOUT(
+        MS_BTN4, KC_NO, MS_BTN3, MS_BTN5,
+        PKC_GESTURE, PKC_DRAG_SCROLL, MS_BTN1, MS_BTN2
+    ),
+    [2] = LAYOUT(
+        _______, _______, _______, _______,
+        _______, _______, _______, _______),
+    [3] = LAYOUT(
+        _______, _______, _______, _______,
+        _______, _______, _______, _______),
+    [4] = LAYOUT(
+        _______, _______, _______, _______,
+        _______, _______, _______, _______),
+    [5] = LAYOUT(
+        _______, _______, _______, _______,
+        _______, _______, _______, _______),
+    [6] = LAYOUT(
+        _______, _______, _______, _______,
+        _______, _______, _______, _______),
+    [7] = LAYOUT(
+        _______, _______, _______, _______,
+        _______, _______, _______, _______),
 };
+// clang-format on
 
 void keyboard_pre_init_user(void) {
     /* Set up GPIO for both TMAG sensors. */
@@ -189,7 +210,6 @@ void keyboard_post_init_user(void) {
     rgblight_mode_noeeprom(RGBLIGHT_MODE_STATIC_LIGHT);
 
     rgblight_sethsv(0, 0, RGBLIGHT_VAL_STEP * 4);
-    rgblight_set_layer_state(BASE_LAYER_COLOUR, true);
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
@@ -198,12 +218,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             if (record->event.pressed) {
                 /* Send correct gesture mode activation based on preference. */
                 pointing_device_gestures_start();
-                rgblight_set_layer_state(GESTURE_LAYER_COLOUR, true);
             }
             /* Switch is released. */
             else {
                 pointing_device_gestures_end();
-                rgblight_set_layer_state(GESTURE_LAYER_COLOUR, false);
             }
             return true;
         case PKC_DRAG_SCROLL:
@@ -325,4 +343,50 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
     }
 
     return mouse_report;
+}
+
+// --------------------------------------
+// 起動時OS判定
+// --------------------------------------
+// 起動時1秒だけOSに応じた色を点灯
+bool process_detected_host_os_user(os_variant_t detected_os) {
+    /* Disable all startup LED layers first. */
+    rgblight_set_layer_state(MAC_LAYER_COLOUR, false);
+    rgblight_set_layer_state(WINDOWS_LAYER_COLOUR, false);
+    rgblight_set_layer_state(OTHER_LAYER_COLOUR, false);
+
+    switch (detected_os) {
+        case OS_MACOS:
+            rgblight_set_layer_state(MAC_LAYER_COLOUR, true);
+            break;
+
+        case OS_WINDOWS:
+            rgblight_set_layer_state(WINDOWS_LAYER_COLOUR, true);
+            break;
+
+        case OS_UNSURE:
+            /* Wait for OS detection to stabilize. */
+            return true;
+
+        default:
+            rgblight_set_layer_state(OTHER_LAYER_COLOUR, true);
+            break;
+    }
+
+    startup_led_timer  = timer_read32();
+    startup_led_active = true;
+
+    return true;
+}
+// 消灯処理
+void housekeeping_task_user(void) {
+    if (startup_led_active && timer_elapsed32(startup_led_timer) >= 1000) {
+        rgblight_set_layer_state(MAC_LAYER_COLOUR, false);
+        rgblight_set_layer_state(WINDOWS_LAYER_COLOUR, false);
+        rgblight_set_layer_state(OTHER_LAYER_COLOUR, false);
+
+        rgblight_disable_noeeprom();
+
+        startup_led_active = false;
+    }
 }
